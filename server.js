@@ -8,6 +8,8 @@ const updateprofileRoutes = require("./routes/updateprofileRoutes");
 const adminRoutes = require("./routes/adminRoutes"); // ✅ เพิ่ม
 const locationRoutes = require("./routes/locationRoutes");
 const postRoutes = require("./routes/postRoutes");
+const donationDayRoutes = require("./routes/donationDayRoutes");
+
 
 const app = express();
 
@@ -20,11 +22,13 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/booking", bookingRoutes);
-app.use("/api/health", healthRoutes);
+app.use("/api/health-assessment", healthRoutes); // ✅ เปลี่ยน path
 app.use("/api/update-profile", updateprofileRoutes);
 app.use("/api/admin", adminRoutes); // ✅ เพิ่ม
 app.use("/api/location", locationRoutes);
 app.use("/api/post", postRoutes);
+app.use("/api/donation-day", donationDayRoutes);
+
 
 app.listen(3000, () => {
   console.log("Server running on port 3000");
