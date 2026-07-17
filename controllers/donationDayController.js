@@ -22,9 +22,9 @@ exports.getAll = async (req, res) => {
        FROM DONATION_Day d
        LEFT JOIN Location l ON d.Location_ID = l.Location_ID
        LEFT JOIN Time_Slot t ON d.DonationD_ID = t.DonationD_ID
-LEFT JOIN Booking b ON DATE(b.booking_datetime) = DATE_FORMAT(d.Donation_date, '%Y-%m-%d')
-  AND TIME(b.booking_datetime) = t.Start_time
-  AND b.booking_status = 'approved'
+       LEFT JOIN Booking b ON DATE(b.booking_datetime) = DATE_FORMAT(d.Donation_date, '%Y-%m-%d')
+         AND TIME(b.booking_datetime) = t.Start_time
+         AND b.booking_status != 'cancelled'
        GROUP BY d.DonationD_ID, d.Donation_date, d.Status, d.Location_ID,
                 l.name, t.Slot_ID, t.Start_time, t.End_time, t.max_quota
        ORDER BY d.Donation_date DESC, t.Start_time ASC`,
