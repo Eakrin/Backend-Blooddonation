@@ -9,8 +9,8 @@ exports.createBooking = (req, res) => {
 
   // ✅ 1. เช็คผลประเมินสุขภาพล่าสุดที่ยังไม่ผูกกับ booking ไหน
   db.query(
-    `SELECT * FROM Health_Assessment 
-     WHERE Donor_ID = ? AND Booking_ID IS NULL 
+    `SELECT * FROM Health_Assessment
+     WHERE Donor_ID = ? AND Booking_ID IS NULL
      ORDER BY assessment_date DESC LIMIT 1`,
     [donor_id],
     (err, assessmentResult) => {
@@ -23,6 +23,10 @@ exports.createBooking = (req, res) => {
       if (assessmentResult[0].result_status === 'fail') {
         return res.status(400).json({ message: "คุณไม่ผ่านการประเมินสุขภาพเบื้องต้น ไม่สามารถจองคิวบริจาคโลหิตได้" });
       }
+
+      // ✅ เปลี่ยนแนวทาง: ไม่บล็อกกรณี 'pending' (เหลือง) อีกต่อไป เพราะรวมจุดตรวจสอบ
+      // ไว้ที่เดียวแล้วคือหน้า "รายชื่อผู้จอง" — เจ้าหน้าที่จะเห็นผลประเมินสุขภาพ
+      // (รวมถึงเคสเหลือง) ประกอบตอนอนุมัติ/ปฏิเสธคิวที่นั่นแทน ไม่ต้องอนุมัติ 2 รอบ
 
       // ✅ 2. เช็คโควตาจาก Time_Slot
       db.query(
@@ -48,9 +52,9 @@ exports.createBooking = (req, res) => {
 
           // ✅ 3. เช็คจองซ้ำ
           db.query(
-            `SELECT * FROM Booking 
-             WHERE Donor_ID = ? 
-             AND booking_datetime = ? 
+            `SELECT * FROM Booking
+             WHERE Donor_ID = ?
+             AND booking_datetime = ?
              AND booking_status != 'cancelled'`,
             [donor_id, booking_datetime],
             (err, existing) => {
@@ -61,6 +65,8 @@ exports.createBooking = (req, res) => {
               }
 
               // ✅ 4. สร้าง booking
+              // ตั้งเป็น 'pending' ตามเดิม เจ้าหน้าที่ต้องอนุมัติทุกคิวที่หน้า "รายชื่อผู้จอง"
+              // (ระบบเช็คโควตาห้ามจองเกินอัตโนมัติแล้วในขั้นตอนที่ 2 ด้านบน แยกกันคนละเรื่องกับการอนุมัติ)
               db.query(
                 `INSERT INTO Booking (Donor_ID, booking_datetime, booking_status) VALUES (?, ?, 'pending')`,
                 [donor_id, booking_datetime],
@@ -71,11 +77,11 @@ exports.createBooking = (req, res) => {
 
                   // ✅ 5. ผูก Health_Assessment เข้ากับ booking นี้
                   db.query(
-                    `UPDATE Health_Assessment 
-                     SET Booking_ID = ? 
-                     WHERE Donor_ID = ? 
-                     AND Booking_ID IS NULL 
-                     ORDER BY assessment_date DESC 
+                    `UPDATE Health_Assessment
+                     SET Booking_ID = ?
+                     WHERE Donor_ID = ?
+                     AND Booking_ID IS NULL
+                     ORDER BY assessment_date DESC
                      LIMIT 1`,
                     [booking_id, donor_id],
                     (err2) => {
@@ -128,11 +134,15 @@ exports.cancelBooking = (req, res) => {
   );
 };
 
+// ✅ เพิ่ม JOIN กับ Health_Assessment เพื่อให้เจ้าหน้าที่เห็นผลคัดกรองสุขภาพ
+// (pass/pending/fail) ของแต่ละคิว ประกอบการอนุมัติ/ปฏิเสธในหน้าเดียว
 exports.getAllBookings = (req, res) => {
   db.query(
-    `SELECT b.*, d.name, d.lastname, d.phone
+    `SELECT b.*, d.name, d.lastname, d.phone, d.blood_type,
+            ha.result_status AS assessment_status
      FROM Booking b
      JOIN Donor d ON b.Donor_ID = d.Donor_ID
+     LEFT JOIN Health_Assessment ha ON ha.Booking_ID = b.Booking_ID
      ORDER BY b.booking_datetime DESC`,
     (err, results) => {
       if (err) return res.status(500).json({ message: "Server error", error: err.message });
