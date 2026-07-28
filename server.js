@@ -1,3 +1,4 @@
+require("dotenv").config(); // ✅ ใหม่: โหลดค่าจากไฟล์ .env (ต้องอยู่บรรทัดบนสุดก่อน require อื่นๆ)
 const express = require("express");
 const cors = require("cors");
 

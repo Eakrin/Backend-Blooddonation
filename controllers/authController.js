@@ -46,6 +46,15 @@ exports.login = async (req, res) => {
     );
     if (donorResult.length > 0) {
       const user = donorResult[0];
+
+      // ✅ ใหม่: บัญชีที่สมัครผ่าน Google จะมีรหัสผ่านแบบสุ่มที่ผู้ใช้ไม่รู้
+      // ให้บอกตรงๆ ว่าต้อง login ผ่าน Google เท่านั้น แทนที่จะขึ้น "รหัสผ่านไม่ถูกต้อง" ให้งง
+      if (user.has_password === 0) {
+        return res.status(401).json({
+          message: "บัญชีนี้สมัครสมาชิกผ่าน Google กรุณาเข้าสู่ระบบด้วยปุ่ม \"Continue with Google\" เท่านั้น",
+        });
+      }
+
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch)
         return res.status(401).json({ message: "Password ไม่ถูกต้อง" });
@@ -192,6 +201,10 @@ exports.register = async (req, res) => {
       .json({ message: "กรุณากรอกข้อมูลส่วนตัวพื้นฐานให้ครบถ้วน" });
   }
 
+  // ✅ ใหม่: ถ้ามีการอัปโหลดรูปโปรไฟล์มาด้วย (ผ่าน multer + Cloudinary)
+  // req.file.path จะเป็น URL รูปที่อยู่บน Cloudinary แล้ว (ไม่ใช่ path ในเครื่อง)
+  const profileUrl = req.file ? req.file.path : null;
+
   try {
     db.query(
       "SELECT Donor_ID FROM Donor WHERE email = ?",
@@ -207,8 +220,8 @@ exports.register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const sql = `
-                INSERT INTO Donor (name, lastname, email, password, phone, blood_type, birthday, gender, weight, height)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO Donor (name, lastname, email, password, phone, blood_type, birthday, gender, weight, height, profile)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `;
 
         db.query(
@@ -224,6 +237,7 @@ exports.register = async (req, res) => {
             gender || "",
             weight,
             height,
+            profileUrl,
           ],
           (err) => {
             if (err)
@@ -309,8 +323,8 @@ exports.googleLogin = async (req, res) => {
       const lastName = nameParts.slice(1).join(" ") || "";
 
       const insertResult = await queryPromise(
-        `INSERT INTO Donor (name, lastname, email, password, phone, blood_type, birthday, gender, weight, height, profile)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO Donor (name, lastname, email, password, phone, blood_type, birthday, gender, weight, height, profile, has_password)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           firstName,
           lastName,
@@ -323,6 +337,7 @@ exports.googleLogin = async (req, res) => {
           null,
           null,
           picture || null,
+          0, // ✅ ยังไม่เคยตั้งรหัสผ่านของตัวเอง (สมัครผ่าน Google)
         ],
       );
 

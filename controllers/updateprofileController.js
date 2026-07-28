@@ -48,10 +48,16 @@ exports.updateProfile = async (req, res) => {
     const parsedHeight = height ? parseFloat(height) : null;
     const formattedBirthday = birthday || null;
 
+    // ✅ ใหม่: ถ้ามีการอัปโหลดรูปโปรไฟล์ใหม่มาด้วย (ผ่าน multer + Cloudinary)
+    // req.file.path จะเป็น URL รูปบน Cloudinary ถ้าไม่ได้แนบรูปมา (แค่แก้ข้อมูลอื่น) จะเป็น null
+    const profileUrl = req.file ? req.file.path : null;
+
     // ✅ เพิ่ม email เข้าไปใน SQL UPDATE (ของเดิมไม่มี ทำให้แก้อีเมลแล้วไม่ถูกบันทึก)
+    // ✅ ใหม่: profile = COALESCE(?, profile) -> ถ้า profileUrl เป็น null (ไม่ได้อัปโหลดรูปใหม่)
+    // จะไม่แตะค่ารูปเดิมในฐานข้อมูลเลย ถ้ามีค่า (อัปโหลดรูปใหม่) ถึงจะเขียนทับ
     const sql = `
             UPDATE Donor
-            SET name = ?, lastname = ?, email = ?, phone = ?, weight = ?, height = ?, gender = ?, blood_type = ?, birthday = ?
+            SET name = ?, lastname = ?, email = ?, phone = ?, weight = ?, height = ?, gender = ?, blood_type = ?, birthday = ?, profile = COALESCE(?, profile)
             WHERE Donor_ID = ?
         `;
 
@@ -67,6 +73,7 @@ exports.updateProfile = async (req, res) => {
         gender || "",
         blood_type || "",
         formattedBirthday,
+        profileUrl,
         donorId,
       ],
       (err, result) => {
@@ -85,7 +92,23 @@ exports.updateProfile = async (req, res) => {
             .status(404)
             .json({ message: "ไม่พบข้อมูลผู้บริจาคในระบบ" });
         }
-        return res.status(200).json({ message: "บันทึกข้อมูลสำเร็จ" });
+
+        // ✅ ใหม่: ดึงค่า profile ล่าสุดกลับไปให้ frontend เก็บ URL จริงจาก Cloudinary
+        // (ไม่ใช้ base64 preview ที่ frontend สร้างไว้ชั่วคราวตอนเลือกไฟล์)
+        db.query(
+          "SELECT profile FROM Donor WHERE Donor_ID = ?",
+          [donorId],
+          (err2, rows) => {
+            if (err2) {
+              // เคสนี้ข้อมูลบันทึกสำเร็จแล้ว แค่ดึงกลับมาไม่ได้ ไม่ถือเป็น error หลัก
+              return res.status(200).json({ message: "บันทึกข้อมูลสำเร็จ", profile: null });
+            }
+            return res.status(200).json({
+              message: "บันทึกข้อมูลสำเร็จ",
+              profile: rows[0]?.profile || null,
+            });
+          },
+        );
       },
     );
   } catch (error) {
